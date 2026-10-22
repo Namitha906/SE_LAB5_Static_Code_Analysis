@@ -1,54 +1,93 @@
+
+"""Manage a small in-memory music catalog and playlists."""
+
 import json
 import secrets
 import sqlite3
 
 conn = sqlite3.connect(":memory:")
-conn.execute("CREATE TABLE songs (id INTEGER PRIMARY KEY, title TEXT, artist TEXT, plays INTEGER)")
-
-
-def addSong(title, artist, plays=0, playlist=[]):
-   conn.execute(
-    "INSERT INTO songs (title, artist, plays) VALUES (?, ?, ?)",
-    (title, artist, plays),
+conn.execute(
+    """
+    CREATE TABLE songs (
+        id INTEGER PRIMARY KEY,
+        title TEXT,
+        artist TEXT,
+        plays INTEGER
+    )
+    """
 )
-   playlist.append(title)
-   return playlist
 
 
-def shufflePick():
-    ids = [r[0] for r in conn.execute("SELECT id FROM songs")]
+def add_song(title, artist, plays=0, playlist=None):
+    """Add a song to the catalog and playlist."""
+    if playlist is None:
+        playlist = []
+
+    conn.execute(
+        "INSERT INTO songs (title, artist, plays) VALUES (?, ?, ?)",
+        (title, artist, plays),
+    )
+    playlist.append(title)
+    return playlist
+
+
+def shuffle_pick():
+    """Return a randomly selected song ID, or None if empty."""
+    ids = [row[0] for row in conn.execute("SELECT id FROM songs")]
+    if not ids:
+        return None
     return secrets.choice(ids)
 
 
 def popularity(title):
-    row = conn.execute("SELECT plays FROM songs WHERE title = ?", (title,)).fetchone()
+    """Classify a song by its play count."""
+    row = conn.execute(
+        "SELECT plays FROM songs WHERE title = ?", (title,)
+    ).fetchone()
     if row is None:
         return "unknown"
-    else:
-        return "popular" if row[0] > 100 else "niche"
+    return "popular" if row[0] > 100 else "niche"
 
 
-def savePlaylist(playlist):
+def save_playlist(playlist):
+    """Serialize a playlist as UTF-8 JSON bytes."""
     return json.dumps(playlist).encode("utf-8")
 
 
-def loadPlaylist(blob):
+def load_playlist(blob):
+    """Deserialize a playlist from UTF-8 JSON bytes."""
     return json.loads(blob.decode("utf-8"))
 
-def totalPlays():
+
+def total_plays():
+    """Return the sum of all song play counts."""
     try:
-        return conn.execute("SELECT SUM(plays) FROM songs").fetchone()[0]
-    except:
+        result = conn.execute(
+            "SELECT SUM(plays) FROM songs"
+        ).fetchone()
+    except sqlite3.Error:
         return 0
+
+    return result[0] if result[0] is not None else 0
 
 
 def main():
-    pl = addSong("Aurora", "Nila", 250)
-    addSong("Monsoon", "Kavya", 40, pl)
-    blob = savePlaylist(pl)
-    l = loadPlaylist(blob)
-    if len(l) > 1: print("multi-song playlist")
-    print(popularity("Aurora"), popularity("Monsoon"), shufflePick(), totalPlays())
+    """Demonstrate catalog and playlist operations."""
+    playlist = add_song("Aurora", "Nila", 250)
+    add_song("Monsoon", "Kavya", 40, playlist)
+    blob = save_playlist(playlist)
+    loaded_playlist = load_playlist(blob)
+
+    if len(loaded_playlist) > 1:
+        print("multi-song playlist")
+
+    print(
+        popularity("Aurora"),
+        popularity("Monsoon"),
+        shuffle_pick(),
+        total_plays(),
+    )
 
 
-main()
+if __name__ == "__main__":
+    main()
